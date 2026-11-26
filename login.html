@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="Vortex Tailoring App — Sign in to your account." />
+<title>Vortex — Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+<style>
+  :root {
+    --burgundy: #55152F;
+    --burgundy-2: #74233F;
+    --burgundy-deep: #3d0e22;
+    --ivory: #FAF8F5;
+    --white: #FFFFFF;
+    --gold: #D6AD62;
+    --champagne: #E9D7AF;
+    --gold-soft: rgba(214, 173, 98, 0.18);
+    --text: #2a1420;
+    --muted: #6b5560;
+    --border: rgba(85, 21, 47, 0.12);
+    --error: #a8263c;
+    --error-bg: rgba(168, 38, 60, 0.08);
+    --success: #2f7a52;
+    --success-bg: rgba(47, 122, 82, 0.1);
+    --shadow-lg: 0 24px 60px -20px rgba(85, 21, 47, 0.35), 0 8px 24px -12px rgba(85, 21, 47, 0.2);
+    --shadow-sm: 0 2px 10px -4px rgba(85, 21, 47, 0.2);
+    --radius: 14px;
+    --radius-lg: 22px;
+    --font-display: 'Cormorant Garamond', Georgia, serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ivory: #101014;
+      --white: #19191F;
+      --text: #F7F4F1;
+      --muted: #A5A0A7;
+      --border: rgba(214, 173, 98, 0.16);
+      --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.7), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+      --shadow-sm: 0 2px 10px -4px rgba(0, 0, 0, 0.5);
+      --error-bg: rgba(201, 143, 148, 0.12);
+      --success-bg: rgba(120, 200, 150, 0.1);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font-body);
+    background: var(--ivory);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 700px 500px at -10% -20%, rgba(85, 21, 47, 0.10), transparent 60%),
+      radial-gradient(ellipse 600px 500px at 110% 10%, rgba(214, 173, 98, 0.14), transparent 55%),
+      radial-gradient(ellipse 900px 700px at 50% 120%, rgba(116, 35, 63, 0.08), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  @media (prefers-color-scheme: dark) {
+    body::before {
+      background:
+        radial-gradient(ellipse 700px 500px at -10% -20%, rgba(214, 173, 98, 0.08), transparent 60%),
+        radial-gradient(ellipse 600px 500px at 110% 10%, rgba(201, 143, 148, 0.10), transparent 55%),
+        radial-gradient(ellipse 900px 700px at 50% 120%, rgba(85, 21, 47, 0.25), transparent 60%);
+    }
+  }
+
+  header.brand {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px clamp(20px, 5vw, 48px);
+  }
+  .brand-mark {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+    color: var(--text);
+  }
+  .brand-vortex {
+    width: 38px; height: 38px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--burgundy), var(--burgundy-2));
+    display: grid; place-items: center;
+    box-shadow: 0 6px 18px -6px rgba(85, 21, 47, 0.5);
+    position: relative;
+    overflow: hidden;
+  }
+  .brand-vortex::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 30% 30%, rgba(214, 173, 98, 0.9), transparent 55%);
+    mix-blend-mode: screen;
+    opacity: 0.55;
+  }
+  .brand-vortex svg { width: 20px; height: 20px; color: var(--champagne); position: relative; z-index: 1; }
+  .brand-name {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: var(--burgundy);
+  }
+  @media (prefers-color-scheme: dark) { .brand-name { color: var(--champagne); } }
+  .brand-tag {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .header-link {
+    font-size: 13.5px;
+    color: var(--muted);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+  .header-link strong { color: var(--burgundy); font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .header-link strong { color: var(--gold); } }
+  .header-link:hover { color: var(--burgundy); }
+  @media (prefers-color-scheme: dark) { .header-link:hover { color: var(--gold); } }
+
+  main {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px clamp(16px, 5vw, 40px) 60px;
+  }
+  .auth-card {
+    width: 100%;
+    max-width: 500px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: clamp(28px, 5vw, 44px);
+    position: relative;
+    overflow: hidden;
+    animation: cardIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.985); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .auth-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--burgundy), var(--gold), var(--burgundy-2));
+    opacity: 0.9;
+  }
+  .auth-head { text-align: center; margin-bottom: 28px; }
+  .auth-eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .auth-title {
+    font-family: var(--font-display);
+    font-size: clamp(28px, 4.4vw, 36px);
+    font-weight: 700;
+    color: var(--burgundy);
+    line-height: 1.15;
+    margin-bottom: 8px;
+  }
+  @media (prefers-color-scheme: dark) { .auth-title { color: var(--champagne); } }
+  .auth-sub {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.55;
+    max-width: 380px;
+    margin: 0 auto;
+  }
+
+  .field { margin-bottom: 16px; position: relative; }
+  .field label {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 7px;
+    letter-spacing: 0.01em;
+  }
+  .field label .req { color: var(--error); margin-left: 2px; }
+  .input-wrap { position: relative; display: flex; align-items: center; }
+  .input-wrap .lead-icon {
+    position: absolute;
+    left: 14px;
+    width: 17px; height: 17px;
+    color: var(--muted);
+    pointer-events: none;
+    transition: color 0.2s;
+  }
+  .field input[type="email"],
+  .field input[type="password"],
+  .field input[type="text"] {
+    width: 100%;
+    padding: 13px 44px 13px 42px;
+    font-size: 14.5px;
+    font-family: var(--font-body);
+    color: var(--text);
+    background: var(--ivory);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  }
+  @media (prefers-color-scheme: dark) {
+    .field input[type="email"],
+    .field input[type="password"],
+    .field input[type="text"] { background: #222129; }
+  }
+  .field input::placeholder { color: var(--muted); opacity: 0.65; }
+  .field input:focus {
+    border-color: var(--burgundy);
+    background: var(--white);
+    box-shadow: 0 0 0 4px var(--gold-soft);
+  }
+  @media (prefers-color-scheme: dark) {
+    .field input:focus { border-color: var(--gold); background: #222129; }
+  }
+  .field:focus-within .lead-icon { color: var(--burgundy); }
+  @media (prefers-color-scheme: dark) {
+    .field:focus-within .lead-icon { color: var(--gold); }
+  }
+  .field.invalid input { border-color: var(--error); }
+
+  .toggle-eye {
+    position: absolute;
+    right: 8px;
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    display: grid; place-items: center;
+    cursor: pointer;
+    transition: color 0.2s, background 0.2s;
+  }
+  .toggle-eye:hover { color: var(--burgundy); background: var(--gold-soft); }
+  @media (prefers-color-scheme: dark) { .toggle-eye:hover { color: var(--gold); } }
+  .toggle-eye svg { width: 18px; height: 18px; }
+
+  .field-hint {
+    font-size: 12px;
+    margin-top: 6px;
+    color: var(--muted);
+    min-height: 16px;
+  }
+  .field-hint.error { color: var(--error); }
+
+  .row-between {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 4px 0 20px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .remember {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .remember input {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    background: var(--white);
+    cursor: pointer;
+    position: relative;
+    transition: border-color 0.2s, background 0.2s;
+    flex-shrink: 0;
+  }
+  @media (prefers-color-scheme: dark) { .remember input { background: #222129; } }
+  .remember input:checked {
+    background: var(--burgundy);
+    border-color: var(--burgundy);
+  }
+  .remember input:checked::after {
+    content: "";
+    position: absolute;
+    left: 4px; top: 1px;
+    width: 5px; height: 9px;
+    border: solid var(--champagne);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .remember:hover input { border-color: var(--burgundy); }
+
+  .forgot-link {
+    font-size: 13px;
+    color: var(--burgundy);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    padding: 2px 0;
+    font-family: var(--font-body);
+    transition: color 0.2s;
+  }
+  @media (prefers-color-scheme: dark) { .forgot-link { color: var(--gold); } }
+  .forgot-link:hover { text-decoration: underline; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    width: 100%;
+    padding: 14px 20px;
+    font-family: var(--font-body);
+    font-size: 14.5px;
+    font-weight: 600;
+    border-radius: 12px;
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s, background 0.2s, border-color 0.2s, color 0.2s;
+    letter-spacing: 0.01em;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn svg { width: 18px; height: 18px; }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--burgundy), var(--burgundy-2));
+    color: var(--champagne);
+    box-shadow: 0 10px 28px -12px rgba(85, 21, 47, 0.7);
+  }
+  .btn-primary::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(214, 173, 98, 0.35), transparent 45%);
+    opacity: 0;
+    transition: opacity 0.35s;
+    pointer-events: none;
+  }
+  .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 14px 34px -12px rgba(85, 21, 47, 0.85); }
+  .btn-primary:hover:not(:disabled)::after { opacity: 1; }
+  .btn-primary:active:not(:disabled) { transform: translateY(0); }
+  .btn-google {
+    background: var(--white);
+    color: var(--text);
+    border: 1.5px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  @media (prefers-color-scheme: dark) { .btn-google { background: #222129; } }
+  .btn-google:hover:not(:disabled) { border-color: var(--burgundy); background: var(--ivory); }
+  @media (prefers-color-scheme: dark) { .btn-google:hover:not(:disabled) { border-color: var(--gold); background: #2a2930; } }
+  .btn-google svg { width: 18px; height: 18px; }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 22px 0;
+    color: var(--muted);
+    font-size: 11.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .divider::before, .divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .foot-note {
+    text-align: center;
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 22px;
+    line-height: 1.6;
+  }
+  .foot-note a { color: var(--burgundy); text-decoration: none; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .foot-note a { color: var(--gold); } }
+  .foot-note a:hover { text-decoration: underline; }
+
+  /* Pending screen */
+  .pending-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--ivory);
+  }
+  .pending-screen.show { display: flex; }
+  .pending-card {
+    max-width: 480px;
+    width: 100%;
+    text-align: center;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: clamp(32px, 6vw, 52px);
+    box-shadow: var(--shadow-lg);
+    animation: cardIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .pending-icon {
+    width: 76px; height: 76px;
+    border-radius: 50%;
+    margin: 0 auto 22px;
+    display: grid; place-items: center;
+    background: var(--gold-soft);
+    color: var(--burgundy);
+    position: relative;
+  }
+  @media (prefers-color-scheme: dark) { .pending-icon { color: var(--gold); } }
+  .pending-icon::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 2px solid var(--gold);
+    opacity: 0.35;
+    animation: pulseRing 2.4s ease-out infinite;
+  }
+  @keyframes pulseRing {
+    0% { transform: scale(0.9); opacity: 0.5; }
+    100% { transform: scale(1.35); opacity: 0; }
+  }
+  .pending-icon svg { width: 34px; height: 34px; }
+  .pending-title {
+    font-family: var(--font-display);
+    font-size: 27px;
+    color: var(--burgundy);
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  @media (prefers-color-scheme: dark) { .pending-title { color: var(--champagne); } }
+  .pending-body {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 8px;
+  }
+  .pending-email {
+    display: inline-block;
+    margin: 16px 0 8px;
+    padding: 8px 16px;
+    background: var(--ivory);
+    border: 1px dashed var(--border);
+    border-radius: 999px;
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+  }
+  @media (prefers-color-scheme: dark) { .pending-email { background: #222129; } }
+  .pending-actions {
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1.5px solid var(--border);
+  }
+  .btn-ghost:hover:not(:disabled) { color: var(--burgundy); border-color: var(--burgundy); }
+  @media (prefers-color-scheme: dark) { .btn-ghost:hover:not(:disabled) { color: var(--gold); border-color: var(--gold); } }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 8, 15, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: fadeIn 0.25s ease;
+  }
+  .modal-backdrop.show { display: flex; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 28px;
+    max-width: 440px;
+    width: 100%;
+    box-shadow: var(--shadow-lg);
+    animation: modalIn 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    border: 1px solid var(--border);
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: translateY(12px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .modal-icon {
+    width: 52px; height: 52px;
+    border-radius: 14px;
+    display: grid; place-items: center;
+    margin-bottom: 16px;
+  }
+  .modal-icon.error { background: var(--error-bg); color: var(--error); }
+  .modal-icon.success { background: var(--success-bg); color: var(--success); }
+  .modal-icon.info { background: var(--gold-soft); color: var(--burgundy); }
+  @media (prefers-color-scheme: dark) { .modal-icon.info { color: var(--gold); } }
+  .modal-icon svg { width: 26px; height: 26px; }
+  .modal-title {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+    line-height: 1.25;
+  }
+  .modal-body {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 22px;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+  .modal-actions .btn { width: auto; padding: 11px 20px; font-size: 13.5px; }
+
+  /* Forgot password modal-specific */
+  .modal .field { margin-bottom: 8px; }
+  .modal .field input[type="email"] {
+    width: 100%;
+    padding: 12px 42px 12px 42px;
+    font-size: 14px;
+    font-family: var(--font-body);
+    color: var(--text);
+    background: var(--ivory);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  @media (prefers-color-scheme: dark) { .modal .field input[type="email"] { background: #222129; } }
+  .modal .field input[type="email"]:focus {
+    border-color: var(--burgundy);
+    box-shadow: 0 0 0 3px var(--gold-soft);
+  }
+  @media (prefers-color-scheme: dark) { .modal .field input[type="email"]:focus { border-color: var(--gold); } }
+
+  /* Toast */
+  .toast-stack {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+    max-width: calc(100vw - 40px);
+  }
+  .toast {
+    pointer-events: auto;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--burgundy);
+    border-radius: 10px;
+    padding: 12px 16px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 260px;
+    max-width: 380px;
+    font-size: 13.5px;
+    color: var(--text);
+    animation: toastIn 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .toast.success { border-left-color: var(--success); }
+  .toast.error { border-left-color: var(--error); }
+  .toast.leaving { animation: toastOut 0.3s ease forwards; }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(30px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes toastOut { to { opacity: 0; transform: translateX(30px); } }
+  .toast svg { width: 17px; height: 17px; flex-shrink: 0; margin-top: 1px; }
+  .toast.success svg { color: var(--success); }
+  .toast.error svg { color: var(--error); }
+  .toast.info svg { color: var(--burgundy); }
+  @media (prefers-color-scheme: dark) { .toast.info svg { color: var(--gold); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+  @media (max-width: 460px) {
+    .auth-card { padding: 24px 20px; }
+    .modal-actions { flex-direction: column-reverse; }
+    .modal-actions .btn { width: 100%; }
+    .toast-stack { left: 12px; right: 12px; top: 12px; }
+    .row-between { font-size: 12.5px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="brand">
+  <a href="#" class="brand-mark" aria-label="Vortex home">
+    <div class="brand-vortex" aria-hidden="true">
+      <i data-lucide="wind"></i>
+    </div>
+    <div>
+      <div class="brand-name">Vortex</div>
+      <div class="brand-tag">Tailoring App</div>
+    </div>
+  </a>
+  <a href="Index.html" class="header-link">New here? <strong>Create account</strong></a>
+</header>
+
+<main>
+  <div class="auth-card" id="authCard">
+    <div class="auth-head">
+      <div class="auth-eyebrow">Welcome back</div>
+      <h1 class="auth-title">Sign in to Vortex</h1>
+      <p class="auth-sub">Continue crafting resumes that speak to every opportunity — elegantly and truthfully.</p>
+    </div>
+
+    <form id="loginForm" novalidate>
+      <div class="field" id="fieldEmail">
+        <label for="email">Email address <span class="req">*</span></label>
+        <div class="input-wrap">
+          <i data-lucide="mail" class="lead-icon"></i>
+          <input type="email" id="email" name="email" autocomplete="email" placeholder="you@example.com" required />
+        </div>
+        <div class="field-hint" id="hintEmail"></div>
+      </div>
+
+      <div class="field" id="fieldPassword">
+        <label for="password">Password <span class="req">*</span></label>
+        <div class="input-wrap">
+          <i data-lucide="lock" class="lead-icon"></i>
+          <input type="password" id="password" name="password" autocomplete="current-password" placeholder="Enter your password" required />
+          <button type="button" class="toggle-eye" id="togglePw" aria-label="Show password">
+            <i data-lucide="eye"></i>
+          </button>
+        </div>
+        <div class="field-hint" id="hintPassword"></div>
+      </div>
+
+      <div class="row-between">
+        <label class="remember" for="remember">
+          <input type="checkbox" id="remember" />
+          <span>Remember me</span>
+        </label>
+        <button type="button" class="forgot-link" id="btnForgot">Forgot password?</button>
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="btnSubmit">
+        <span id="btnSubmitText">Sign in</span>
+        <i data-lucide="arrow-right" id="btnSubmitIcon"></i>
+      </button>
+
+      <div class="divider">or</div>
+
+      <button type="button" class="btn btn-google" id="btnGoogle">
+        <svg viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/>
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+          <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.1-11.3-7.6l-6.5 5C9.5 39.6 16.2 44 24 44z"/>
+          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.6l6.2 5.2C41.2 35.6 44 30.3 44 24c0-1.3-.1-2.4-.4-3.5z"/>
+        </svg>
+        Continue with Google
+      </button>
+
+      <p class="foot-note">
+        New accounts require approval by the CEO before tailoring is enabled.
+      </p>
+    </form>
+  </div>
+</main>
+
+<!-- Pending approval screen -->
+<div class="pending-screen" id="pendingScreen" role="dialog" aria-modal="true" aria-labelledby="pendingTitle">
+  <div class="pending-card">
+    <div class="pending-icon"><i data-lucide="hourglass"></i></div>
+    <h2 class="pending-title" id="pendingTitle">Account under review</h2>
+    <p class="pending-body">
+      Your account is still awaiting CEO approval. Access to the tailoring engine unlocks as soon as your registration is approved.
+    </p>
+    <span class="pending-email" id="pendingEmail"></span>
+    <div class="pending-actions">
+      <button class="btn btn-ghost" id="pendingSignOut">
+        <i data-lucide="log-out"></i> Sign out
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic modal -->
+<div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-icon" id="modalIcon"></div>
+    <h3 class="modal-title" id="modalTitle"></h3>
+    <p class="modal-body" id="modalBody"></p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="modalOk">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- Forgot password modal -->
+<div class="modal-backdrop" id="forgotBackdrop" role="dialog" aria-modal="true" aria-labelledby="forgotTitle">
+  <div class="modal">
+    <div class="modal-icon info" id="forgotIcon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </div>
+    <h3 class="modal-title" id="forgotTitle">Reset your password</h3>
+    <p class="modal-body" id="forgotBody">Enter the email address on your account and we'll send a secure link to reset your password.</p>
+    <form id="forgotForm">
+      <div class="field">
+        <div class="input-wrap">
+          <i data-lucide="mail" class="lead-icon"></i>
+          <input type="email" id="forgotEmail" placeholder="you@example.com" autocomplete="email" required />
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top: 12px;">
+        <button type="button" class="btn btn-ghost" id="forgotCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="forgotSend">
+          <span id="forgotSendText">Send reset link</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast stack -->
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+  import {
+    getAuth,
+    signInWithEmailAndPassword,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signOut,
+    sendPasswordResetEmail,
+    setPersistence,
+    browserLocalPersistence,
+    browserSessionPersistence,
+    onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+  import {
+    getDatabase,
+    ref,
+    get
+  } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDYEBiyJNuttnLDDieWwmaydisV4LZa5ik",
+    authDomain: "vortex-tailoring-app.firebaseapp.com",
+    databaseURL: "https://vortex-tailoring-app-default-rtdb.firebaseio.com",
+    projectId: "vortex-tailoring-app",
+    storageBucket: "vortex-tailoring-app.firebasestorage.app",
+    messagingSenderId: "834977355062",
+    appId: "1:834977355062:web:3e617a1c52890cec678f97",
+    measurementId: "G-Q2SPR91L52"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getDatabase(app);
+
+  const CEO_EMAIL = "jesseegwuatu@gmail.com";
+
+  function refreshIcons() {
+    if (window.lucide && typeof window.lucide.createIcons === "function") {
+      window.lucide.createIcons();
+    }
+  }
+  window.addEventListener("load", refreshIcons);
+
+  // ---------- Modal ----------
+  const modalBackdrop = document.getElementById("modalBackdrop");
+  const modalTitle = document.getElementById("modalTitle");
+  const modalBody = document.getElementById("modalBody");
+  const modalIcon = document.getElementById("modalIcon");
+  const modalOk = document.getElementById("modalOk");
+
+  const ICONS = {
+    error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+    success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+  };
+
+  function showModal(type, title, body, onClose) {
+    modalTitle.textContent = title;
+    modalBody.textContent = body;
+    modalIcon.className = "modal-icon " + type;
+    modalIcon.innerHTML = ICONS[type] || ICONS.info;
+    modalBackdrop.classList.add("show");
+    const close = () => {
+      modalBackdrop.classList.remove("show");
+      modalOk.removeEventListener("click", close);
+      if (typeof onClose === "function") onClose();
+    };
+    modalOk.addEventListener("click", close);
+    modalOk.focus();
+  }
+
+  // ---------- Toast ----------
+  const toastStack = document.getElementById("toastStack");
+  function showToast(type, message) {
+    const el = document.createElement("div");
+    el.className = "toast " + type;
+    const iconSvg = type === "success" ? ICONS.success : type === "error" ? ICONS.error : ICONS.info;
+    el.innerHTML = iconSvg + "<div></div>";
+    el.lastChild.textContent = message;
+    toastStack.appendChild(el);
+    setTimeout(() => {
+      el.classList.add("leaving");
+      setTimeout(() => el.remove(), 320);
+    }, 4200);
+  }
+
+  // ---------- Field helpers ----------
+  const fieldEmail = document.getElementById("fieldEmail");
+  const fieldPassword = document.getElementById("fieldPassword");
+  const hintEmail = document.getElementById("hintEmail");
+  const hintPassword = document.getElementById("hintPassword");
+  const emailEl = document.getElementById("email");
+  const passwordEl = document.getElementById("password");
+
+  function setFieldState(fieldEl, hintEl, state, message) {
+    fieldEl.classList.remove("invalid", "valid");
+    if (state) fieldEl.classList.add(state);
+    hintEl.textContent = message || "";
+    hintEl.classList.toggle("error", state === "invalid");
+  }
+
+  // Password visibility
+  const togglePw = document.getElementById("togglePw");
+  togglePw.addEventListener("click", () => {
+    const isPw = passwordEl.type === "password";
+    passwordEl.type = isPw ? "text" : "password";
+    togglePw.innerHTML = isPw ? '<i data-lucide="eye-off"></i>' : '<i data-lucide="eye"></i>';
+    togglePw.setAttribute("aria-label", isPw ? "Hide password" : "Show password");
+    refreshIcons();
+  });
+
+  // Ripple pointer
+  document.querySelectorAll(".btn-primary").forEach(btn => {
+    btn.addEventListener("pointermove", (e) => {
+      const r = btn.getBoundingClientRect();
+      btn.style.setProperty("--mx", ((e.clientX - r.left) / r.width * 100) + "%");
+      btn.style.setProperty("--my", ((e.clientY - r.top) / r.height * 100) + "%");
+    });
+  });
+
+  // ---------- Pending ----------
+  const pendingScreen = document.getElementById("pendingScreen");
+  const pendingEmail = document.getElementById("pendingEmail");
+  const pendingSignOut = document.getElementById("pendingSignOut");
+  function showPending(email) {
+    pendingEmail.textContent = email || "";
+    pendingScreen.classList.add("show");
+    document.getElementById("authCard").style.display = "none";
+    refreshIcons();
+  }
+  pendingSignOut.addEventListener("click", async () => {
+    try { await signOut(auth); } catch (_) {}
+    pendingScreen.classList.remove("show");
+    document.getElementById("authCard").style.display = "";
+  });
+
+  // ---------- Route after login based on user record ----------
+  async function routeAfterAuth(user) {
+    if (!user) return;
+    let snap;
+    try {
+      snap = await get(ref(db, "users/" + user.uid));
+    } catch (err) {
+      showModal("error", "Connection problem", "Could not reach your account record. Check your connection and try again.");
+      return;
+    }
+
+    if (!snap.exists()) {
+      // No user record — this happens if account was created outside our flow.
+      // Create a pending record so the CEO can review it.
+      showModal("info", "Account record missing", "Your account exists but has no registration record. Please contact the CEO to resolve this.");
+      await signOut(auth);
+      return;
+    }
+
+    const data = snap.val();
+    const status = data.status;
+
+    if (status === "approved") {
+      // CEO first-login password change flag
+      if (data.mustChangePassword === true) {
+        sessionStorage.setItem("vortex_force_pw_change", "1");
+      } else {
+        sessionStorage.removeItem("vortex_force_pw_change");
+      }
+      window.location.href = "VT.html";
+      return;
+    }
+
+    if (status === "pending") {
+      showPending(user.email || "");
+      return;
+    }
+
+    if (status === "suspended") {
+      showModal(
+        "error",
+        "Account suspended",
+        "Unfortunately, you cannot tailor resumes because your account has been suspended. Please reach out to the CEO or an administrator for a review.",
+        async () => { await signOut(auth); }
+      );
+      return;
+    }
+
+    if (status === "banned") {
+      showModal(
+        "error",
+        "Account banned",
+        "This account has been banned and can no longer access Vortex.",
+        async () => { await signOut(auth); }
+      );
+      return;
+    }
+
+    if (status === "rejected") {
+      showModal(
+        "error",
+        "Registration not approved",
+        "Your registration was not approved. Please contact the CEO if you believe this is a mistake.",
+        async () => { await signOut(auth); }
+      );
+      return;
+    }
+
+    showPending(user.email || "");
+  }
+
+  // ---------- Login form ----------
+  const form = document.getElementById("loginForm");
+  const btnSubmit = document.getElementById("btnSubmit");
+  const btnSubmitText = document.getElementById("btnSubmitText");
+  const rememberEl = document.getElementById("remember");
+
+  // Restore remember preference
+  const remembered = localStorage.getItem("vortex_remember") === "1";
+  rememberEl.checked = remembered;
+
+  function setLoading(loading) {
+    btnSubmit.disabled = loading;
+    if (loading) {
+      btnSubmitText.textContent = "Signing in";
+      const icon = document.getElementById("btnSubmitIcon");
+      if (icon) icon.outerHTML = '<span class="spinner" id="btnSubmitIcon"></span>';
+    } else {
+      btnSubmitText.textContent = "Sign in";
+      const sp = document.getElementById("btnSubmitIcon");
+      if (sp) sp.outerHTML = '<i data-lucide="arrow-right" id="btnSubmitIcon"></i>';
+      refreshIcons();
+    }
+  }
+
+  function mapAuthError(code) {
+    const map = {
+      "auth/invalid-email": "That email address appears to be invalid.",
+      "auth/user-disabled": "This account has been disabled. Please contact the CEO.",
+      "auth/user-not-found": "No account found with that email.",
+      "auth/wrong-password": "Incorrect password. Please try again.",
+      "auth/invalid-credential": "Incorrect email or password.",
+      "auth/invalid-login-credentials": "Incorrect email or password.",
+      "auth/network-request-failed": "Network error. Check your connection and try again.",
+      "auth/too-many-requests": "Too many attempts. Please wait a moment and try again.",
+      "auth/operation-not-allowed": "Email/password sign-in is disabled in the Firebase console."
+    };
+    return map[code] || "Something went wrong. Please try again.";
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = emailEl.value.trim();
+    const pw = passwordEl.value;
+
+    if (!email) {
+      setFieldState(fieldEmail, hintEmail, "invalid", "Please enter your email address.");
+      emailEl.focus();
+      return;
+    }
+    if (!pw) {
+      setFieldState(fieldPassword, hintPassword, "invalid", "Please enter your password.");
+      passwordEl.focus();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Apply persistence based on remember-me
+      const persistence = rememberEl.checked ? browserLocalPersistence : browserSessionPersistence;
+      await setPersistence(auth, persistence);
+      localStorage.setItem("vortex_remember", rememberEl.checked ? "1" : "0");
+
+      const cred = await signInWithEmailAndPassword(auth, email, pw);
+      await routeAfterAuth(cred.user);
+    } catch (err) {
+      const code = err && err.code ? err.code : "";
+      showModal("error", "Sign-in failed", mapAuthError(code));
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  // ---------- Google ----------
+  const btnGoogle = document.getElementById("btnGoogle");
+  btnGoogle.addEventListener("click", async () => {
+    btnGoogle.disabled = true;
+    const original = btnGoogle.innerHTML;
+    btnGoogle.innerHTML = '<span class="spinner"></span> Connecting';
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Check for existing record; if none, create pending
+      const snap = await get(ref(db, "users/" + user.uid));
+      if (!snap.exists()) {
+        const { ref: refFn, set, serverTimestamp } = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js");
+        await set(refFn(db, "users/" + user.uid), {
+          uid: user.uid,
+          displayName: user.displayName || "Vortex User",
+          email: user.email || "",
+          role: "user",
+          status: "pending",
+          provider: "google",
+          createdAt: serverTimestamp(),
+          mustChangePassword: false
+        });
+        showPending(user.email || "");
+        showToast("success", "Account created. Awaiting CEO approval.");
+        return;
+      }
+
+      await routeAfterAuth(user);
+    } catch (err) {
+      const code = err && err.code ? err.code : "";
+      if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {
+        showModal("error", "Google sign-in failed", mapAuthError(code));
+      }
+    } finally {
+      btnGoogle.disabled = false;
+      btnGoogle.innerHTML = original;
+    }
+  });
+
+  // ---------- Forgot password ----------
+  const forgotBackdrop = document.getElementById("forgotBackdrop");
+  const forgotForm = document.getElementById("forgotForm");
+  const forgotEmail = document.getElementById("forgotEmail");
+  const forgotCancel = document.getElementById("forgotCancel");
+  const forgotSend = document.getElementById("forgotSend");
+  const forgotSendText = document.getElementById("forgotSendText");
+  const forgotTitle = document.getElementById("forgotTitle");
+  const forgotBody = document.getElementById("forgotBody");
+  const forgotIcon = document.getElementById("forgotIcon");
+
+  const RESET_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+  const CHECK_ICON = ICONS.success;
+
+  function openForgot() {
+    forgotBackdrop.classList.add("show");
+    forgotTitle.textContent = "Reset your password";
+    forgotBody.textContent = "Enter the email address on your account and we'll send a secure link to reset your password.";
+    forgotIcon.className = "modal-icon info";
+    forgotIcon.innerHTML = RESET_ICON;
+    forgotSendText.textContent = "Send reset link";
+    forgotSend.style.display = "";
+    forgotCancel.textContent = "Cancel";
+    forgotEmail.value = emailEl.value.trim();
+    setTimeout(() => forgotEmail.focus(), 60);
+  }
+  function closeForgot() {
+    forgotBackdrop.classList.remove("show");
+  }
+
+  document.getElementById("btnForgot").addEventListener("click", openForgot);
+  forgotCancel.addEventListener("click", closeForgot);
+  forgotBackdrop.addEventListener("click", (e) => {
+    if (e.target === forgotBackdrop) closeForgot();
+  });
+
+  forgotForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = forgotEmail.value.trim();
+    if (!email) {
+      forgotEmail.focus();
+      return;
+    }
+    forgotSend.disabled = true;
+    forgotSendText.textContent = "Sending";
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (err) {
+      // Never reveal whether the email exists — that's a security best practice.
+      // Log it quietly for debugging.
+      console.warn("Password reset error:", err && err.code);
+    }
+    // Always show success UI, regardless of whether email existed.
+    forgotTitle.textContent = "Check your inbox";
+    forgotBody.textContent = "If an account exists for " + email + ", a password reset link is on its way. Be sure to check your spam folder too.";
+    forgotIcon.className = "modal-icon success";
+    forgotIcon.innerHTML = CHECK_ICON;
+    forgotSend.style.display = "none";
+    forgotCancel.textContent = "Back to sign in";
+    forgotSend.disabled = false;
+    forgotSendText.textContent = "Send reset link";
+  });
+
+  // ---------- Already signed in? Route on arrival ----------
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) return;
+    try {
+      const snap = await get(ref(db, "users/" + user.uid));
+      if (!snap.exists()) return;
+      const data = snap.val();
+      if (data.status === "approved") {
+        if (data.mustChangePassword === true) {
+          sessionStorage.setItem("vortex_force_pw_change", "1");
+        } else {
+          sessionStorage.removeItem("vortex_force_pw_change");
+        }
+        window.location.href = "VT.html";
+      } else if (data.status === "pending") {
+        showPending(user.email || "");
+      }
+    } catch (_) {}
+  });
+
+  // ---------- Esc closes modals ----------
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (modalBackdrop.classList.contains("show")) modalBackdrop.classList.remove("show");
+    if (forgotBackdrop.classList.contains("show")) closeForgot();
+  });
+
+  // CEO hint in console only — never shown to users
+  if (auth.currentUser && auth.currentUser.email === CEO_EMAIL) {
+    console.info("Vortex CEO session detected.");
+  }
+</script>
+</body>
+</html>
