@@ -6,7 +6,7 @@ export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const FIREBASE_DB_URL = 'https://vortex-tailoring-app-default-rtdb.firebaseio.com';
 
 // Free auto-router — OpenRouter picks a live free model per request.
-export const FREE_MODEL = 'google/gemma-4-31b-it:free';
+export const FREE_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
 
 /* ---------- JSON helpers ---------- */
 export function jsonOk(res, obj) {
