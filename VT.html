@@ -2324,6 +2324,9 @@ const firebaseConfig = {
 const CLOUDINARY_CLOUD_NAME = "dsyr5ejvh";
 const CLOUDINARY_UPLOAD_PRESET = "hustlermindset";
 
+// 🔥 THIS IS THE CRITICAL FIX FOR THE 404 ERROR 🔥
+const API_BASE = "/api"; 
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
@@ -2768,7 +2771,7 @@ $("#btnExtractJob").addEventListener("click", async () => {
   const btn = $("#btnExtractJob"); btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Extracting...';
   try {
-    const r = await fetch("/api/extract-job", {
+    const r = await fetch(`${API_BASE}/extract-job`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url })
     });
@@ -2838,10 +2841,10 @@ $("#btnStartTailoring").addEventListener("click", async () => {
     $("#tailorStatusLog").innerHTML += `<div>• Enrichment included</div>`;
   }
   $("#tailorProgress").style.width = "30%";
-  $("#tailorStatusLog").innerHTML += `<div>• Calling /api/tailor...</div>`;
+  $("#tailorStatusLog").innerHTML += `<div>• Calling ${API_BASE}/tailor...</div>`;
 
   try {
-    const r = await fetch("/api/tailor", {
+    const r = await fetch(`${API_BASE}/tailor`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ resumeText: finalResume, jobDescription: jd })
     });
@@ -2900,7 +2903,7 @@ $("#btnDownloadPDF").addEventListener("click", async () => {
   const btn = $("#btnDownloadPDF"); btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Generating...';
   try {
-    const r = await fetch("/api/generate-pdf", {
+    const r = await fetch(`${API_BASE}/generate-pdf`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tailored: state.currentTailor.tailored, template: "classic" })
     });
@@ -3090,7 +3093,7 @@ $("#btnStartBulk").addEventListener("click", async () => {
   state.currentBulk = { urls, results: [], profileId, profileName: profile.name };
 
   try {
-    const r = await fetch("/api/bulk-tailor", {
+    const r = await fetch(`${API_BASE}/bulk-tailor`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ resumeText: profile.resumeText, jobs: urls.map(u => ({ url: u })) })
     });
@@ -3114,7 +3117,6 @@ $("#btnStartBulk").addEventListener("click", async () => {
           ? `✓ Tailored with ${res.model}`
           : `✗ ${res.error || "Failed"}`;
       }
-      // Save to history
       if (res.status === "completed" && res.tailored) {
         dbPush(dbRef(db, "users/" + state.user.uid + "/history"), {
           profileId, profileName: profile.name, model: res.model,
@@ -3149,7 +3151,7 @@ $("#btnBulkZip").addEventListener("click", async () => {
     for (let i = 0; i < state.currentBulk.results.length; i++) {
       const res = state.currentBulk.results[i];
       if (res.status !== "completed" || !res.tailored) continue;
-      const r = await fetch("/api/generate-pdf", {
+      const r = await fetch(`${API_BASE}/generate-pdf`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tailored: res.tailored })
       });
@@ -3324,9 +3326,7 @@ async function loadAdminAnalytics() {
     const userArr = Object.entries(users).map(([id, u]) => ({ id, ...u }));
     const totalUsers = userArr.length;
     const approved = userArr.filter(u => u.status === "approved").length;
-    // Resumes & letters are only in per-user history, so we sum them
     let totalResumes = 0, totalLetters = 0;
-    // Fetch each user's history (capped)
     for (const u of userArr.slice(0, 50)) {
       try {
         const hSnap = await dbGet(dbRef(db, "users/" + u.id + "/history"));
@@ -3341,7 +3341,6 @@ async function loadAdminAnalytics() {
     $("#adminStatResumes").textContent = totalResumes;
     $("#adminStatLetters").textContent = totalLetters;
 
-    // Simple 30-day activity chart from audit log
     const canvas = $("#adminAnalyticsChart"); if (!canvas) return;
     const ctx = canvas.getContext("2d");
     const w = canvas.width = canvas.clientWidth || 600;
@@ -3359,10 +3358,8 @@ async function loadAdminAnalytics() {
     const max = Math.max(1, ...buckets);
     const pad = 30;
     const bw = (w - pad * 2) / days;
-    // Axis
     ctx.strokeStyle = "rgba(85,21,47,0.15)";
     ctx.beginPath(); ctx.moveTo(pad, h - pad); ctx.lineTo(w - pad, h - pad); ctx.stroke();
-    // Bars
     for (let i = 0; i < days; i++) {
       const v = buckets[i];
       const bh = (v / max) * (h - pad * 2);
@@ -3374,7 +3371,6 @@ async function loadAdminAnalytics() {
       ctx.fillStyle = grad;
       ctx.fillRect(x + 1, y, Math.max(1, bw - 2), bh);
     }
-    // Labels
     ctx.fillStyle = "rgba(107,85,96,0.8)";
     ctx.font = "10px Inter, sans-serif";
     ctx.fillText("30 days ago", pad, h - 8);
