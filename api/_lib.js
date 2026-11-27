@@ -5,12 +5,8 @@ export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const FIREBASE_DB_URL = 'https://vortex-tailoring-app-default-rtdb.firebaseio.com';
 
-export const FREE_MODELS = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'deepseek/deepseek-chat-v3-0324:free',
-  'google/gemini-2.0-flash-exp:free',
-  'qwen/qwen-2.5-72b-instruct:free',
-];
+// Free auto-router — OpenRouter picks a live free model per request.
+export const FREE_MODEL = 'openrouter/free';
 
 /* ---------- JSON helpers ---------- */
 export function jsonOk(res, obj) {
@@ -130,7 +126,7 @@ export async function extractJobFromUrl(url) {
   if (!extracted && html) {
     try {
       const ai = await callModel(
-        FREE_MODELS[0],
+        FREE_MODEL,
         `Extract ONLY the job description and requirements from this HTML. Return plain text, no preamble. If you cannot find a job description, return exactly: NOT_FOUND\n\nHTML:\n${html.slice(
           0,
           14000
@@ -145,7 +141,7 @@ export async function extractJobFromUrl(url) {
   if (!extracted) {
     try {
       const ai = await callModel(
-        FREE_MODELS[0],
+        FREE_MODEL,
         `A user pasted this job URL: ${url}\nYou cannot access the web. Write a plausible, generic job description for the role implied by the URL slug (e.g. /jobs/senior-react-developer → Senior React Developer). Keep it 300-500 words. Include responsibilities and requirements. Make clear in the first line: "Note: description synthesized from URL slug."`
       );
       if (ai && ai.length > 100) extracted = ai.trim();
@@ -181,58 +177,61 @@ export async function tailorResume(resumeText, jobDescription) {
   if (resumeText.length > 15000) throw new Error('Resume too long (max 15k chars).');
   if (jobDescription.length > 10000) throw new Error('Job description too long (max 10k chars).');
 
-  let lastError = null;
-  for (const model of FREE_MODELS) {
-    try {
-      const r = await fetch(OPENROUTER_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://vortex-tailoring-app.vercel.app',
-          'X-Title': 'Vortex Tailoring',
+  const r = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://vortex-tailoring-app.vercel.app',
+      'X-Title': 'Vortex Tailoring',
+    },
+    body: JSON.stringify({
+      model: FREE_MODEL,
+      messages: [
+        { role: 'system', content: TAILOR_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `RESUME:\n${resumeText}\n\nJOB DESCRIPTION:\n${jobDescription}\n\nTailor. JSON only.`,
         },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: TAILOR_SYSTEM_PROMPT },
-            {
-              role: 'user',
-              content: `RESUME:\n${resumeText}\n\nJOB DESCRIPTION:\n${jobDescription}\n\nTailor. JSON only.`,
-            },
-          ],
-          temperature: 0.3,
-          max_tokens: 4000,
-        }),
-      });
-      if (!r.ok) {
-        lastError = `${model}: ${r.status}`;
-        continue;
-      }
-      const d = await r.json();
-      let content = d.choices?.[0]?.message?.content || '';
-      content = content
-        .trim()
-        .replace(/^```json/, '')
-        .replace(/^```/, '')
-        .replace(/```$/, '')
-        .trim();
-      let tailored;
-      try {
-        tailored = JSON.parse(content);
-      } catch {
-        lastError = `${model}: bad JSON`;
-        continue;
-      }
-      return { model, tailored };
-    } catch (e) {
-      lastError = `${model}: ${e.message}`;
-    }
+      ],
+      temperature: 0.3,
+      max_tokens: 4000,
+    }),
+  });
+
+  if (!r.ok) {
+    let detail = '';
+    try {
+      const t = await r.text();
+      detail = t.slice(0, 500);
+    } catch {}
+    const err = new Error(`OpenRouter ${r.status}`);
+    err.status = r.status === 429 ? 429 : 502;
+    err.detail = detail;
+    throw err;
   }
-  const err = new Error('All free models unavailable.');
-  err.detail = lastError;
-  err.status = 429;
-  throw err;
+
+  const d = await r.json();
+  const usedModel = d.model || FREE_MODEL;
+  let content = d.choices?.[0]?.message?.content || '';
+  content = content
+    .trim()
+    .replace(/^```json/, '')
+    .replace(/^```/, '')
+    .replace(/```$/, '')
+    .trim();
+
+  let tailored;
+  try {
+    tailored = JSON.parse(content);
+  } catch (e) {
+    const err = new Error('Model returned invalid JSON.');
+    err.status = 502;
+    err.detail = content.slice(0, 500);
+    throw err;
+  }
+
+  return { model: usedModel, tailored };
 }
 
 /* ---------- PDF builder ---------- */
