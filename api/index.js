@@ -159,18 +159,19 @@ async function handleTailor(req) {
   const systemPrompt = `You are an expert resume tailor. Rewrite the provided resume to better match the job description WITHOUT inventing any facts.
 
 Rules:
-1. ONLY rephrase, reorder, and emphasize existing content.
-2. Use keywords from the job description ONLY if truthful to the original.
-3. Do NOT add new skills, jobs, certifications, or projects.
+1. ONLY rephrase, reorder, and emphasize existing content but not just rephrase but tailor it to match the Job Description.
+2. Use keywords from the job description.
+3. You can add new skills required by the job description but do not add new jobs, certifications, or projects unless if added to newly acquired but rephrase their contents.
 4. Output MUST be valid JSON, no markdown fences:
 {
   "name": "", "email": "", "phone": "", "location": "",
-  "summary": "2-3 sentences",
+  "summary": "5-6 sentences",
   "skills": [],
   "experience": [ { "title": "", "company": "", "dates": "", "bullets": [] } ],
   "education": [ { "degree": "", "institution": "", "year": "" } ]
 }
-5. Return ONLY the raw JSON object.`;
+5. Do not give response with unnecessary symbols like ***### please as they are not needed
+6. Return ONLY the raw JSON object.`;
 
   let lastError = null;
   for (const model of FREE_MODELS) {
@@ -242,7 +243,7 @@ async function handleBulkTailor(req) {
     // Tailor
     try {
       // Reuse handleTailor logic inline
-      const sys = `You are an expert resume tailor. Only rephrase existing content. Output valid JSON with keys name, email, phone, location, summary, skills, experience[{title,company,dates,bullets}], education[{degree,institution,year}]. No markdown fences.`;
+      const sys = `You are an expert resume tailor. You are to make sure you tailor the existing content against the Job Description to ensure it matches the Job Description. Output valid JSON with keys name, email, phone, location, summary, skills, experience[{title,company,dates,bullets}], education[{degree,institution,year}]. No markdown fences.`;
       let tailored = null, usedModel = null, lastErr = null;
       for (const model of FREE_MODELS) {
         try {
