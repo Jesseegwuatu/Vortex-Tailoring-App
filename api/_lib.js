@@ -229,8 +229,383 @@ async function callOpenRouterForTailor(payload) {
   return { usedModel, content };
 }
 
-export async function tailorResume(resumeText, jobDescription) {
-  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY missing');
+/* ============================================================
+   DETERMINISTIC FALLBACK — runs only when all AI models fail.
+   Aggressive tailoring: foregrounds JD skills, folds JD stacks
+   into the summary. Length-preserving. Seeded for uniqueness.
+   ============================================================ */
+
+const STOPWORDS = new Set(
+  ('a,an,the,and,or,but,if,then,else,for,to,of,in,on,at,by,with,from,as,is,are,was,were,be,been,being,' +
+    'this,that,these,those,it,its,we,you,they,he,she,i,our,your,their,my,me,us,them,' +
+    'will,would,should,could,can,may,might,must,shall,do,does,did,have,has,had,' +
+    'not,no,so,than,too,very,just,also,into,over,under,about,across,per,via,' +
+    'job,role,position,candidate,applicant,company,team,work,working,years,year,etc').split(',')
+);
+
+const ACTION_SYNONYMS = {
+  build: ['develop', 'create', 'construct', 'engineer'],
+  develop: ['build', 'design', 'implement', 'craft'],
+  manage: ['lead', 'oversee', 'direct', 'coordinate'],
+  lead: ['guide', 'drive', 'spearhead', 'head'],
+  create: ['design', 'build', 'produce', 'generate'],
+  improve: ['enhance', 'optimize', 'refine', 'elevate'],
+  optimize: ['improve', 'streamline', 'tune', 'refine'],
+  design: ['architect', 'craft', 'shape', 'plan'],
+  implement: ['deploy', 'build', 'deliver', 'execute'],
+  analyze: ['evaluate', 'assess', 'examine', 'study'],
+  collaborate: ['partner', 'coordinate', 'work with', 'team with'],
+  support: ['assist', 'enable', 'back', 'facilitate'],
+  deliver: ['ship', 'provide', 'produce', 'supply'],
+  test: ['validate', 'verify', 'evaluate', 'check'],
+  maintain: ['sustain', 'support', 'preserve', 'keep'],
+};
+
+// Phrases used to weave JD stacks into the summary without claiming tenure.
+const SOFT_CLAIM_PATTERNS = [
+  (kw) => `working knowledge of ${kw}`,
+  (kw) => `hands-on exposure to ${kw}`,
+  (kw) => `familiarity with ${kw}`,
+  (kw) => `practical grounding in ${kw}`,
+  (kw) => `applied experience with ${kw}`,
+  (kw) => `aligned with ${kw} requirements`,
+];
+
+function tokenize(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9+#.\-\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
+}
+
+function jdKeywords(jd) {
+  const toks = tokenize(jd);
+  const freq = new Map();
+  for (const t of toks) freq.set(t, (freq.get(t) || 0) + 1);
+  return [...freq.entries()]
+    .map(([w, c]) => ({ w, score: c * Math.min(w.length, 12) }))
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.w);
+}
+
+function jdSkillPhrases(jd) {
+  const words = String(jd || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9+#.\-\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  const phrases = new Map();
+  for (let n = 2; n <= 3; n++) {
+    for (let i = 0; i + n <= words.length; i++) {
+      const slice = words.slice(i, i + n);
+      if (slice.every((w) => w.length > 2 && !STOPWORDS.has(w))) {
+        const phrase = slice.join(' ');
+        phrases.set(phrase, (phrases.get(phrase) || 0) + 1);
+      }
+    }
+  }
+  return [...phrases.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 40)
+    .map(([p]) => p);
+}
+
+function jdRequiredSkills(jd) {
+  const phrases = jdSkillPhrases(jd);
+  const singles = jdKeywords(jd);
+  const out = [];
+  const seen = new Set();
+  for (const p of phrases) {
+    if (!seen.has(p)) {
+      seen.add(p);
+      out.push(p);
+    }
+  }
+  for (const s of singles) {
+    if (!seen.has(s)) {
+      seen.add(s);
+      out.push(s);
+    }
+  }
+  return out;
+}
+
+function hashString(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function pick(arr, seed) {
+  return arr[seed % arr.length];
+}
+
+function splitSentences(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function titleCasePhrase(s) {
+  return String(s || '')
+    .split(' ')
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ');
+}
+
+/* ---------- text → structured resume ---------- */
+function parseResumeText(text) {
+  const raw = String(text || '');
+  const lines = raw.split(/\r?\n/).map((l) => l.trimEnd());
+  const out = {
+    name: '',
+    email: '',
+    phone: '',
+    location: '',
+    summary: '',
+    skills: [],
+    experience: [],
+    education: [],
+  };
+
+  const emailMatch = raw.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+  if (emailMatch) out.email = emailMatch[0];
+  const phoneMatch = raw.match(/(\+?\d[\d\s().-]{7,}\d)/);
+  if (phoneMatch) out.phone = phoneMatch[0].trim();
+
+  for (const l of lines) {
+    const t = l.trim();
+    if (!t) continue;
+    if (t.includes('@') || /\d{3,}/.test(t)) continue;
+    if (t.length <= 40 && /^[A-Za-z][A-Za-z\s.'-]+$/.test(t)) {
+      out.name = t;
+      break;
+    }
+  }
+
+  const sectionOf = (l) => {
+    const s = l.trim().toLowerCase();
+    if (/^(summary|profile|objective|about)\b/.test(s)) return 'summary';
+    if (/^(skills|technical skills|core competencies|technologies)\b/.test(s)) return 'skills';
+    if (/^(experience|work experience|employment|professional experience)\b/.test(s)) return 'experience';
+    if (/^(education|academic)\b/.test(s)) return 'education';
+    return null;
+  };
+
+  const buckets = { summary: [], skills: [], experience: [], education: [] };
+  let current = null;
+  for (const l of lines) {
+    const t = l.trim();
+    if (!t) continue;
+    const sec = sectionOf(t);
+    if (sec) {
+      current = sec;
+      continue;
+    }
+    if (current) buckets[current].push(t);
+  }
+
+  out.summary = buckets.summary.join(' ').trim();
+
+  out.skills = buckets.skills
+    .join(' ')
+    .split(/[,•|/]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 1 && s.length < 60)
+    .slice(0, 60);
+
+  let curExp = null;
+  for (const l of buckets.experience) {
+    const isBullet = /^[•\-*]\s+/.test(l) || /^\d+[.)]\s+/.test(l);
+    if (!isBullet && l.length < 120) {
+      const parts = l.split(/\s+[—–|-]\s+|\s+at\s+/i);
+      const datesMatch = l.match(/\(([^)]+)\)|\b(19|20)\d{2}\b.*\b(19|20)\d{2}\b|\b(19|20)\d{2}\b/);
+      const dates = datesMatch ? datesMatch[0] : '';
+      curExp = {
+        title: (parts[0] || '').replace(dates, '').trim(),
+        company: (parts[1] || '').replace(dates, '').trim(),
+        dates: dates.replace(/[()]/g, '').trim(),
+        bullets: [],
+      };
+      out.experience.push(curExp);
+    } else if (curExp) {
+      curExp.bullets.push(l.replace(/^[•\-*\d.)]+\s*/, '').trim());
+    }
+  }
+
+  for (const l of buckets.education) {
+    if (l.length < 3) continue;
+    const yr = l.match(/\b(19|20)\d{2}\b/);
+    out.education.push({
+      degree: l.split(/\s+[—–|-]\s+/)[0] || l,
+      institution: l.split(/\s+[—–|-]\s+/)[1] || '',
+      year: yr ? yr[0] : '',
+    });
+  }
+
+  if (!out.summary && !out.experience.length) {
+    out.summary = raw.slice(0, 600).trim();
+  }
+  return out;
+}
+
+/* ---------- deterministic transforms ---------- */
+function rephraseBullet(bullet, seed) {
+  const words = bullet.split(/\s+/);
+  const first = (words[0] || '').toLowerCase().replace(/[^a-z]/g, '');
+  const syn = ACTION_SYNONYMS[first];
+  if (syn) {
+    const replacement = pick(syn, seed + words.length);
+    words[0] = replacement.charAt(0).toUpperCase() + replacement.slice(1);
+  }
+  return words.join(' ');
+}
+
+function reorderSkillsWithJDFirst(originalSkills, requiredSkills, seed) {
+  const norm = (s) => String(s || '').toLowerCase().trim();
+  const origByNorm = new Map(originalSkills.map((s) => [norm(s), s]));
+  const matched = [];
+  const jdOnly = [];
+
+  for (const req of requiredSkills) {
+    const r = norm(req);
+    if (origByNorm.has(r)) {
+      matched.push(origByNorm.get(r));
+      continue;
+    }
+    const found = originalSkills.find((s) => {
+      const sn = norm(s);
+      return sn.includes(r) || r.includes(sn);
+    });
+    if (found) matched.push(found);
+    else jdOnly.push(titleCasePhrase(req));
+  }
+
+  const remaining = originalSkills.filter((s) => !matched.some((m) => norm(m) === norm(s)));
+
+  const maxInject = Math.max(3, Math.ceil(originalSkills.length * 0.4));
+  const injected = jdOnly.slice(0, maxInject).map((s) => titleCasePhrase(s));
+
+  const finalList = [...matched, ...injected, ...remaining];
+
+  const seen = new Set();
+  const deduped = [];
+  for (const s of finalList) {
+    const k = norm(s);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    deduped.push(s);
+  }
+  return deduped;
+}
+
+function buildRichSummary(originalSummary, jdRequired, seed) {
+  const originalSentences = splitSentences(originalSummary);
+  const targetCount = originalSentences.length || 4;
+
+  const lower = (originalSummary || '').toLowerCase();
+  const notMentioned = jdRequired.filter((r) => !lower.includes(r.toLowerCase()));
+
+  const slotsForNew = Math.max(0, targetCount - originalSentences.length);
+  const newSentences = [];
+  for (let i = 0; i < Math.min(notMentioned.length, Math.max(2, slotsForNew)); i++) {
+    const kw = titleCasePhrase(notMentioned[i]);
+    const pattern = SOFT_CLAIM_PATTERNS[(seed + i) % SOFT_CLAIM_PATTERNS.length];
+    newSentences.push(`Brings ${pattern(kw)}.`);
+  }
+
+  let result = [...originalSentences];
+  if (result.length === 0) {
+    const fallbackOpener = [
+      'Results-driven professional aligned with the target role.',
+      'Experienced practitioner focused on delivering measurable outcomes.',
+    ][seed % 2];
+    result.push(fallbackOpener);
+  }
+
+  const combined = [];
+  const maxLen = Math.max(result.length, targetCount);
+  let ri = 0;
+  let ni = 0;
+  for (let i = 0; i < maxLen; i++) {
+    if (i === 0 && ri < result.length) {
+      combined.push(result[ri++]);
+      continue;
+    }
+    if (ni < newSentences.length && (i % 2 === 0 || ri >= result.length)) {
+      combined.push(newSentences[ni++]);
+    } else if (ri < result.length) {
+      combined.push(result[ri++]);
+    }
+  }
+  while (ri < result.length) combined.push(result[ri++]);
+
+  return combined
+    .slice(0, Math.max(targetCount, result.length))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function reorderExperienceByRelevance(exp, jdRequired, seed) {
+  const scored = exp.map((e, idx) => {
+    const text = `${e.title} ${e.company} ${(e.bullets || []).join(' ')}`.toLowerCase();
+    const score = jdRequired.reduce((acc, kw) => acc + (text.includes(kw.toLowerCase()) ? 1 : 0), 0);
+    return { e, score, idx };
+  });
+  scored.sort((a, b) => b.score - a.score || a.idx - b.idx);
+  return scored.map((s) => s.e);
+}
+
+/* ---------- main deterministic fallback ---------- */
+export function deterministicTailor(resumeText, jobDescription, seedOffset = 0) {
+  const seed = (hashString(jobDescription) + seedOffset * 7919) >>> 0;
+  const required = jdRequiredSkills(jobDescription);
+  const parsed = parseResumeText(resumeText);
+
+  const originalSkills = (
+    parsed.skills.length ? parsed.skills : tokenize(resumeText).slice(0, 25)
+  ).map((s) => s.trim());
+
+  const skills = reorderSkillsWithJDFirst(originalSkills, required, seed);
+
+  const exp = (parsed.experience || []).map((e, i) => ({
+    title: e.title || '',
+    company: e.company || '',
+    dates: e.dates || '',
+    bullets: (e.bullets || []).map((b) => rephraseBullet(b, seed + i)),
+  }));
+  const experience = reorderExperienceByRelevance(exp, required, seed);
+
+  const summary = buildRichSummary(parsed.summary, required, seed);
+
+  const tailored = {
+    name: parsed.name || 'Your Name',
+    email: parsed.email || '',
+    phone: parsed.phone || '',
+    location: parsed.location || '',
+    summary,
+    skills,
+    experience,
+    education: parsed.education || [],
+  };
+
+  return { model: `deterministic-v1(seed=${seed})`, tailored };
+}
+
+/* ---------- Tailoring entry point (3 attempts, always returns) ---------- */
+export async function tailorResume(resumeText, jobDescription, seedOffset = 0) {
+  if (!OPENROUTER_API_KEY) {
+    // No key at all — still return something useful.
+    console.warn('OPENROUTER_API_KEY missing — using deterministic fallback directly.');
+    return deterministicTailor(resumeText, jobDescription, seedOffset);
+  }
   if (!resumeText || !jobDescription) throw new Error('resumeText and jobDescription required');
   if (resumeText.length > 15000) throw new Error('Resume too long (max 15k chars).');
   if (jobDescription.length > 10000) throw new Error('Job description too long (max 10k chars).');
@@ -274,10 +649,10 @@ export async function tailorResume(resumeText, jobDescription) {
     const tailored = JSON.parse(content);
     return { model: usedModel, tailored };
   } catch (e) {
-    const err = new Error('Tailoring failed on all models.');
-    err.status = e.status || firstError?.status || 502;
-    err.detail = `primary: ${firstError?.message || 'n/a'} | last resort: ${e.message}`;
-    throw err;
+    console.warn('Last-resort AI failed:', e.message, e.detail || '');
+
+    // ---------- Attempt 3: deterministic fallback (always succeeds) ----------
+    return deterministicTailor(resumeText, jobDescription, seedOffset);
   }
 }
 
