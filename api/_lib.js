@@ -5,21 +5,15 @@ export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const FIREBASE_DB_URL = 'https://vortex-tailoring-app-default-rtdb.firebaseio.com';
 
-// Free model fallback list — OpenRouter tries them in order when route: 'fallback' is set
+// Primary fallback set — OpenRouter allows max 3 items when route: 'fallback'
 export const FREE_MODELS = [
   'nvidia/nemotron-3-ultra-550b-a55b:free',
   'baidu/ernie-5.5-flash-preview:free',
   'google/gemma-4-31b-it:free',
-  'nvidia/nemotron-3.5-super-vl:free',
-  'nvidia/nemotron-3.5-lightning:free',
-  'particle-ai/particle-1:free',
-  'recursive/flint-v1.0:free',
-  'liquid/lfm-3-1.7b:free',
-  'inclusionai/ling-3.2-flash:free',
-  'cohere/north-mini-code:free',
-  'dots-studio/dots-3-note-preview:free',
-  'openrouter/free',
 ];
+
+// Last-resort router if the 3-model fallback fails entirely
+export const LAST_RESORT_MODEL = 'openrouter/free';
 
 /* ---------- JSON helpers ---------- */
 export function jsonOk(res, obj) {
@@ -184,90 +178,107 @@ Rules:
 }
 5. Return ONLY the raw JSON object.`;
 
+const TAILOR_USER_PROMPT = (resumeText, jobDescription) =>
+  `RESUME:\n${resumeText}\n\nJOB DESCRIPTION:\n${jobDescription}\n\nTailor. JSON only.`;
+
+function cleanJsonText(raw) {
+  return String(raw || '')
+    .trim()
+    .replace(/^```json/, '')
+    .replace(/^```/, '')
+    .replace(/```$/, '')
+    .trim();
+}
+
+async function callOpenRouterForTailor(payload) {
+  const r = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://vortex-tailoring-app.vercel.app',
+      'X-Title': 'Vortex Tailoring',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  let bodyText = '';
+  try {
+    bodyText = await r.text();
+  } catch {}
+
+  if (!r.ok) {
+    const err = new Error(`OpenRouter ${r.status}`);
+    err.status = r.status === 429 ? 429 : 502;
+    err.detail = bodyText.slice(0, 500);
+    throw err;
+  }
+
+  let d;
+  try {
+    d = JSON.parse(bodyText);
+  } catch {
+    const err = new Error('OpenRouter returned non-JSON body.');
+    err.status = 502;
+    err.detail = bodyText.slice(0, 500);
+    throw err;
+  }
+
+  const usedModel = d.model || payload.model || (payload.models && payload.models[0]) || 'unknown';
+  const content = cleanJsonText(d.choices?.[0]?.message?.content || '');
+  return { usedModel, content };
+}
+
 export async function tailorResume(resumeText, jobDescription) {
   if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY missing');
   if (!resumeText || !jobDescription) throw new Error('resumeText and jobDescription required');
   if (resumeText.length > 15000) throw new Error('Resume too long (max 15k chars).');
   if (jobDescription.length > 10000) throw new Error('Job description too long (max 10k chars).');
 
-  const body = {
-    models: FREE_MODELS,
-    route: 'fallback',
-    messages: [
-      { role: 'system', content: TAILOR_SYSTEM_PROMPT },
-      {
-        role: 'user',
-        content: `RESUME:\n${resumeText}\n\nJOB DESCRIPTION:\n${jobDescription}\n\nTailor. JSON only.`,
-      },
-    ],
-    temperature: 0.3,
-    max_tokens: 2048,
-    response_format: { type: 'json_object' },
-  };
+  const messages = [
+    { role: 'system', content: TAILOR_SYSTEM_PROMPT },
+    { role: 'user', content: TAILOR_USER_PROMPT(resumeText, jobDescription) },
+  ];
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const r = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://vortex-tailoring-app.vercel.app',
-        'X-Title': 'Vortex Tailoring',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!r.ok) {
-      let detail = '';
-      try {
-        detail = (await r.text()).slice(0, 500);
-      } catch {}
-      const err = new Error(`OpenRouter ${r.status}`);
-      err.status = r.status === 429 ? 429 : 502;
-      err.detail = detail;
-      throw err;
-    }
-
-    const d = await r.json();
-    const usedModel = d.model || FREE_MODELS[0];
-    let content = d.choices?.[0]?.message?.content || '';
-
-    if (!content || !content.trim()) {
-      if (attempt === 0) {
-        await new Promise((res) => setTimeout(res, 800));
-        continue;
-      }
-      const err = new Error('Model returned empty content.');
-      err.status = 502;
-      err.detail = 'Empty content, likely a reasoning model consumed all tokens.';
-      throw err;
-    }
-
-    content = content
-      .trim()
-      .replace(/^```json/, '')
-      .replace(/^```/, '')
-      .replace(/```$/, '')
-      .trim();
-
-    try {
-      const tailored = JSON.parse(content);
-      return { model: usedModel, tailored };
-    } catch (e) {
-      if (attempt === 0) {
-        await new Promise((res) => setTimeout(res, 500));
-        continue;
-      }
-      const err = new Error('Model returned invalid JSON.');
-      err.status = 502;
-      err.detail = content.slice(0, 500);
-      throw err;
-    }
+  // ---------- Attempt 1: 3-model fallback ----------
+  let firstError = null;
+  try {
+    const payload = {
+      models: FREE_MODELS,
+      route: 'fallback',
+      messages,
+      temperature: 0.3,
+      max_tokens: 2048,
+      response_format: { type: 'json_object' },
+    };
+    const { usedModel, content } = await callOpenRouterForTailor(payload);
+    if (!content) throw new Error('Empty content from 3-model fallback.');
+    const tailored = JSON.parse(content);
+    return { model: usedModel, tailored };
+  } catch (e) {
+    firstError = e;
+    console.warn('3-model fallback failed:', e.message, e.detail || '');
   }
 
-  const err = new Error('Tailoring failed after retry.');
-  err.status = 502;
-  throw err;
+  // ---------- Attempt 2: openrouter/free last resort ----------
+  try {
+    const payload = {
+      model: LAST_RESORT_MODEL,
+      messages,
+      temperature: 0.3,
+      max_tokens: 2048,
+      response_format: { type: 'json_object' },
+    };
+    const { usedModel, content } = await callOpenRouterForTailor(payload);
+    if (!content) throw new Error('Empty content from openrouter/free.');
+    const tailored = JSON.parse(content);
+    return { model: usedModel, tailored };
+  } catch (e) {
+    const err = new Error('Tailoring failed on all models.');
+    err.status = e.status || firstError?.status || 502;
+    err.detail = `primary: ${firstError?.message || 'n/a'} | last resort: ${e.message}`;
+    throw err;
+  }
 }
 
 /* ---------- PDF builder ---------- */
