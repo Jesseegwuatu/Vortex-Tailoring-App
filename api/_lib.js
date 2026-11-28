@@ -5,14 +5,11 @@ export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const FIREBASE_DB_URL = 'https://vortex-tailoring-app-default-rtdb.firebaseio.com';
 
-// Primary fallback set — OpenRouter allows max 3 items when route: 'fallback'
 export const FREE_MODELS = [
   'nvidia/nemotron-3-ultra-550b-a55b:free',
   'baidu/ernie-5.5-flash-preview:free',
   'google/gemma-4-31b-it:free',
 ];
-
-// Last-resort router if the 3-model fallback fails entirely
 export const LAST_RESORT_MODEL = 'openrouter/free';
 
 /* ---------- JSON helpers ---------- */
@@ -230,9 +227,8 @@ async function callOpenRouterForTailor(payload) {
 }
 
 /* ============================================================
-   DETERMINISTIC FALLBACK — runs only when all AI models fail.
-   Aggressive tailoring: foregrounds JD skills, folds JD stacks
-   into the summary. Length-preserving. Seeded for uniqueness.
+   DETERMINISTIC FALLBACK — structure-preserving, non-fabricating.
+   Runs only when all AI models fail. Seeds vary per bulk index.
    ============================================================ */
 
 const STOPWORDS = new Set(
@@ -242,6 +238,17 @@ const STOPWORDS = new Set(
     'not,no,so,than,too,very,just,also,into,over,under,about,across,per,via,' +
     'job,role,position,candidate,applicant,company,team,work,working,years,year,etc').split(',')
 );
+
+// Common tech tokens that survive the junk filter even if short.
+const KNOWN_TECH = new Set(
+  ('python,fastapi,node,nodejs,java,spring,django,react,typescript,javascript,html,css,' +
+    'postgres,mongodb,redis,kafka,aws,azure,gcp,docker,kubernetes,terraform,jenkins,git,' +
+    'llm,rag,mlops,llmops,openai,anthropic,langchain,langgraph,mcp,embeddings,ci,cd,' +
+    'rest,api,apis,graphql,microservices,sql,nosql,ai,ml,ds,devops').split(',')
+);
+
+// Tokens that are clearly junk from synthesized JD fallbacks.
+const JUNK = new Set(['slug', 'synthesized', 'note', 'description', 'url', 'description.', 'url.']);
 
 const ACTION_SYNONYMS = {
   build: ['develop', 'create', 'construct', 'engineer'],
@@ -259,24 +266,39 @@ const ACTION_SYNONYMS = {
   deliver: ['ship', 'provide', 'produce', 'supply'],
   test: ['validate', 'verify', 'evaluate', 'check'],
   maintain: ['sustain', 'support', 'preserve', 'keep'],
+  developed: ['built', 'created', 'engineered', 'implemented'],
+  built: ['developed', 'created', 'constructed', 'engineered'],
+  designed: ['architected', 'crafted', 'shaped', 'planned'],
+  led: ['guided', 'drove', 'spearheaded', 'headed'],
+  managed: ['oversaw', 'directed', 'coordinated', 'led'],
+  implemented: ['deployed', 'delivered', 'executed', 'built'],
 };
 
-// Phrases used to weave JD stacks into the summary without claiming tenure.
 const SOFT_CLAIM_PATTERNS = [
   (kw) => `working knowledge of ${kw}`,
   (kw) => `hands-on exposure to ${kw}`,
   (kw) => `familiarity with ${kw}`,
   (kw) => `practical grounding in ${kw}`,
   (kw) => `applied experience with ${kw}`,
-  (kw) => `aligned with ${kw} requirements`,
 ];
+
+function isJunkToken(t) {
+  if (!t) return true;
+  const low = t.toLowerCase();
+  if (JUNK.has(low)) return true;
+  if (low.includes('synthesized') || low.includes('slug')) return true;
+  if (/^\d+$/.test(low)) return true;
+  // mixed digits+letters longer than 8 → likely an ID/URL fragment
+  if (low.length > 8 && /\d/.test(low) && /[a-z]/.test(low)) return true;
+  return false;
+}
 
 function tokenize(text) {
   return String(text || '')
     .toLowerCase()
     .replace(/[^a-z0-9+#.\-\s]/g, ' ')
     .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w) && !isJunkToken(w));
 }
 
 function jdKeywords(jd) {
@@ -284,8 +306,9 @@ function jdKeywords(jd) {
   const freq = new Map();
   for (const t of toks) freq.set(t, (freq.get(t) || 0) + 1);
   return [...freq.entries()]
-    .map(([w, c]) => ({ w, score: c * Math.min(w.length, 12) }))
+    .map(([w, c]) => ({ w, c, score: c * Math.min(w.length, 12) }))
     .sort((a, b) => b.score - a.score)
+    .filter((x) => x.c >= 1)
     .map((x) => x.w);
 }
 
@@ -299,7 +322,7 @@ function jdSkillPhrases(jd) {
   for (let n = 2; n <= 3; n++) {
     for (let i = 0; i + n <= words.length; i++) {
       const slice = words.slice(i, i + n);
-      if (slice.every((w) => w.length > 2 && !STOPWORDS.has(w))) {
+      if (slice.every((w) => w.length > 2 && !STOPWORDS.has(w) && !isJunkToken(w))) {
         const phrase = slice.join(' ');
         phrases.set(phrase, (phrases.get(phrase) || 0) + 1);
       }
@@ -307,7 +330,7 @@ function jdSkillPhrases(jd) {
   }
   return [...phrases.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 40)
+    .slice(0, 30)
     .map(([p]) => p);
 }
 
@@ -316,14 +339,20 @@ function jdRequiredSkills(jd) {
   const singles = jdKeywords(jd);
   const out = [];
   const seen = new Set();
+  // phrases first (higher signal)
   for (const p of phrases) {
     if (!seen.has(p)) {
       seen.add(p);
       out.push(p);
     }
   }
+  // singles: require either KNOWN_TECH or frequency ≥ 2 in the JD
+  const freq = new Map();
+  for (const t of tokenize(jd)) freq.set(t, (freq.get(t) || 0) + 1);
   for (const s of singles) {
-    if (!seen.has(s)) {
+    if (seen.has(s)) continue;
+    const c = freq.get(s) || 0;
+    if (KNOWN_TECH.has(s) || c >= 2) {
       seen.add(s);
       out.push(s);
     }
@@ -359,10 +388,21 @@ function titleCasePhrase(s) {
     .join(' ');
 }
 
-/* ---------- text → structured resume ---------- */
+/* ---------- tolerant text → structured resume ---------- */
+function detectSection(line) {
+  const s = line.trim().toLowerCase().replace(/[:\s]+$/, '');
+  if (!s) return null;
+  if (/^(summary|professional summary|profile|objective|about|about me)$/.test(s)) return 'summary';
+  if (/^(skills|key skills|technical skills|core skills|core competencies|technologies)$/.test(s)) return 'skills';
+  if (/^(experience|work experience|professional experience|employment|employment history)$/.test(s)) return 'experience';
+  if (/^(education|education & training|academic|academics)$/.test(s)) return 'education';
+  return null;
+}
+
 function parseResumeText(text) {
   const raw = String(text || '');
-  const lines = raw.split(/\r?\n/).map((l) => l.trimEnd());
+  const lines = raw.split(/\r?\n/).map((l) => l.replace(/\s+$/, ''));
+
   const out = {
     name: '',
     email: '',
@@ -374,88 +414,137 @@ function parseResumeText(text) {
     education: [],
   };
 
+  // contact
   const emailMatch = raw.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
   if (emailMatch) out.email = emailMatch[0];
   const phoneMatch = raw.match(/(\+?\d[\d\s().-]{7,}\d)/);
   if (phoneMatch) out.phone = phoneMatch[0].trim();
 
-  for (const l of lines) {
-    const t = l.trim();
-    if (!t) continue;
-    if (t.includes('@') || /\d{3,}/.test(t)) continue;
-    if (t.length <= 40 && /^[A-Za-z][A-Za-z\s.'-]+$/.test(t)) {
-      out.name = t;
-      break;
-    }
+  // name: first 6 non-empty lines; 2–5 words; no email/digits; allows unicode letters
+  const nonEmpty = lines.map((l) => l.trim()).filter(Boolean);
+  for (let i = 0; i < Math.min(6, nonEmpty.length); i++) {
+    const t = nonEmpty[i];
+    if (t.includes('@')) continue;
+    if (/\d{3,}/.test(t)) continue;
+    const words = t.split(/\s+/);
+    if (words.length < 2 || words.length > 5) continue;
+    if (!/^[\p{L}][\p{L}\s.'-]+$/u.test(t)) continue;
+    // heuristic: contact/nav lines are usually longer than the name line
+    out.name = t;
+    break;
   }
 
-  const sectionOf = (l) => {
-    const s = l.trim().toLowerCase();
-    if (/^(summary|profile|objective|about)\b/.test(s)) return 'summary';
-    if (/^(skills|technical skills|core competencies|technologies)\b/.test(s)) return 'skills';
-    if (/^(experience|work experience|employment|professional experience)\b/.test(s)) return 'experience';
-    if (/^(education|academic)\b/.test(s)) return 'education';
-    return null;
-  };
-
-  const buckets = { summary: [], skills: [], experience: [], education: [] };
-  let current = null;
-  for (const l of lines) {
-    const t = l.trim();
+  // split into sections, keeping order
+  const sections = { preamble: [], summary: [], skills: [], experience: [], education: [] };
+  let current = 'preamble';
+  for (const line of lines) {
+    const t = line.trim();
     if (!t) continue;
-    const sec = sectionOf(t);
+    const sec = detectSection(t);
     if (sec) {
       current = sec;
       continue;
     }
-    if (current) buckets[current].push(t);
+    sections[current].push(t);
   }
 
-  out.summary = buckets.summary.join(' ').trim();
+  // summary: use the summary bucket; if empty, fall back to the first paragraph
+  // of the preamble after the contact block (that's where Piotr's summary lives).
+  if (sections.summary.length) {
+    out.summary = sections.summary.join(' ').trim();
+  } else {
+    // find the longest preamble block that doesn't look like contact/name
+    const candidates = [];
+    let block = [];
+    for (const l of sections.preamble) {
+      const looksLikeContact = l.includes('@') || /linkedin\.com|\+\d|\|.*\|/.test(l);
+      if (looksLikeContact) {
+        if (block.length) {
+          candidates.push(block.join(' '));
+          block = [];
+        }
+        continue;
+      }
+      block.push(l);
+    }
+    if (block.length) candidates.push(block.join(' '));
+    const best = candidates.sort((a, b) => b.length - a.length)[0] || '';
+    out.summary = best.trim();
+  }
 
-  out.skills = buckets.skills
+  // skills
+  out.skills = sections.skills
     .join(' ')
-    .split(/[,•|/]+/)
+    .split(/[,•|/;]+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 1 && s.length < 60)
-    .slice(0, 60);
+    .filter((s) => s.length > 1 && s.length < 60 && !isJunkToken(s))
+    .slice(0, 80);
 
+  // experience
   let curExp = null;
-  for (const l of buckets.experience) {
-    const isBullet = /^[•\-*]\s+/.test(l) || /^\d+[.)]\s+/.test(l);
-    if (!isBullet && l.length < 120) {
-      const parts = l.split(/\s+[—–|-]\s+|\s+at\s+/i);
-      const datesMatch = l.match(/\(([^)]+)\)|\b(19|20)\d{2}\b.*\b(19|20)\d{2}\b|\b(19|20)\d{2}\b/);
-      const dates = datesMatch ? datesMatch[0] : '';
-      curExp = {
-        title: (parts[0] || '').replace(dates, '').trim(),
-        company: (parts[1] || '').replace(dates, '').trim(),
-        dates: dates.replace(/[()]/g, '').trim(),
-        bullets: [],
-      };
+  for (const l of sections.experience) {
+    const isBullet = /^[•\-*–·▪◦]\s+/.test(l) || /^\d+[.)]\s+/.test(l);
+    const looksLikeHeader =
+      !isBullet &&
+      l.length < 140 &&
+      (/\|/.test(l) || /\b(19|20)\d{2}\b/.test(l) || /^[A-Z][A-Z\s/&.-]{4,}$/.test(l));
+    if (looksLikeHeader && curExp === null) {
+      // very first header
+      curExp = parseExpHeader(l);
       out.experience.push(curExp);
+    } else if (looksLikeHeader && curExp && curExp.bullets.length > 0) {
+      curExp = parseExpHeader(l);
+      out.experience.push(curExp);
+    } else if (looksLikeHeader && curExp && curExp.bullets.length === 0) {
+      // continuation of header (e.g. company on next line)
+      const merged = parseExpHeader(`${curExp.title} | ${curExp.dates} ${l}`);
+      curExp.title = merged.title || curExp.title;
+      curExp.company = merged.company || curExp.company;
+      curExp.dates = merged.dates || curExp.dates;
     } else if (curExp) {
-      curExp.bullets.push(l.replace(/^[•\-*\d.)]+\s*/, '').trim());
+      curExp.bullets.push(l.replace(/^[•\-*–·▪◦\d.)]+\s*/, '').trim());
+    } else {
+      curExp = { title: l, company: '', dates: '', bullets: [] };
+      out.experience.push(curExp);
     }
   }
 
-  for (const l of buckets.education) {
+  // education: preserve verbatim if we can't split cleanly
+  for (const l of sections.education) {
     if (l.length < 3) continue;
     const yr = l.match(/\b(19|20)\d{2}\b/);
-    out.education.push({
-      degree: l.split(/\s+[—–|-]\s+/)[0] || l,
-      institution: l.split(/\s+[—–|-]\s+/)[1] || '',
-      year: yr ? yr[0] : '',
-    });
+    const parts = l.split(/\s+[—–|]\s+/);
+    if (parts.length >= 2) {
+      out.education.push({
+        degree: parts[0].trim(),
+        institution: parts[1].trim(),
+        year: yr ? yr[0] : '',
+      });
+    } else {
+      out.education.push({ degree: l, institution: '', year: yr ? yr[0] : '' });
+    }
   }
 
-  if (!out.summary && !out.experience.length) {
-    out.summary = raw.slice(0, 600).trim();
-  }
   return out;
 }
 
-/* ---------- deterministic transforms ---------- */
+function parseExpHeader(line) {
+  // supports "TITLE | DATES", "TITLE | COMPANY | DATES", "TITLE — COMPANY (DATES)"
+  const parts = line.split(/\s*[|—–]\s*/).map((p) => p.trim()).filter(Boolean);
+  let title = parts[0] || '';
+  let company = '';
+  let dates = '';
+  for (let i = 1; i < parts.length; i++) {
+    if (/\b(19|20)\d{2}\b/.test(parts[i]) || /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(parts[i])) {
+      dates = parts[i];
+    } else if (!company) {
+      company = parts[i];
+    }
+  }
+  return { title, company, dates, bullets: [] };
+}
+
+/* ---------- transforms (structure-preserving, no fabrication) ---------- */
 function rephraseBullet(bullet, seed) {
   const words = bullet.split(/\s+/);
   const first = (words[0] || '').toLowerCase().replace(/[^a-z]/g, '');
@@ -489,8 +578,11 @@ function reorderSkillsWithJDFirst(originalSkills, requiredSkills, seed) {
 
   const remaining = originalSkills.filter((s) => !matched.some((m) => norm(m) === norm(s)));
 
-  const maxInject = Math.max(3, Math.ceil(originalSkills.length * 0.4));
-  const injected = jdOnly.slice(0, maxInject).map((s) => titleCasePhrase(s));
+  // Inject at most 25% new, capped at 5, and only tech-looking terms.
+  const maxInject = Math.min(5, Math.max(2, Math.ceil(originalSkills.length * 0.25)));
+  const injected = jdOnly
+    .filter((p) => p.length <= 30 && /^[A-Za-z0-9+#./\s-]+$/.test(p))
+    .slice(0, maxInject);
 
   const finalList = [...matched, ...injected, ...remaining];
 
@@ -498,7 +590,7 @@ function reorderSkillsWithJDFirst(originalSkills, requiredSkills, seed) {
   const deduped = [];
   for (const s of finalList) {
     const k = norm(s);
-    if (!k || seen.has(k)) continue;
+    if (!k || seen.has(k) || isJunkToken(s)) continue;
     seen.add(k);
     deduped.push(s);
   }
@@ -506,51 +598,38 @@ function reorderSkillsWithJDFirst(originalSkills, requiredSkills, seed) {
 }
 
 function buildRichSummary(originalSummary, jdRequired, seed) {
-  const originalSentences = splitSentences(originalSummary);
-  const targetCount = originalSentences.length || 4;
-
+  const sentences = splitSentences(originalSummary);
   const lower = (originalSummary || '').toLowerCase();
-  const notMentioned = jdRequired.filter((r) => !lower.includes(r.toLowerCase()));
+  const notMentioned = jdRequired.filter((r) => !lower.includes(r.toLowerCase())).slice(0, 3);
 
-  const slotsForNew = Math.max(0, targetCount - originalSentences.length);
+  // Never fabricate from nothing. If no summary existed, keep it empty.
+  if (sentences.length === 0) {
+    return '';
+  }
+
+  // Weave at most 2 soft-claim sentences, and only if the original summary is
+  // at least 3 sentences long (so we don't bloat a one-liner).
   const newSentences = [];
-  for (let i = 0; i < Math.min(notMentioned.length, Math.max(2, slotsForNew)); i++) {
-    const kw = titleCasePhrase(notMentioned[i]);
-    const pattern = SOFT_CLAIM_PATTERNS[(seed + i) % SOFT_CLAIM_PATTERNS.length];
-    newSentences.push(`Brings ${pattern(kw)}.`);
+  if (sentences.length >= 3) {
+    for (let i = 0; i < Math.min(notMentioned.length, 2); i++) {
+      const kw = titleCasePhrase(notMentioned[i]);
+      const pattern = SOFT_CLAIM_PATTERNS[(seed + i) % SOFT_CLAIM_PATTERNS.length];
+      newSentences.push(`Brings ${pattern(kw)}.`);
+    }
   }
 
-  let result = [...originalSentences];
-  if (result.length === 0) {
-    const fallbackOpener = [
-      'Results-driven professional aligned with the target role.',
-      'Experienced practitioner focused on delivering measurable outcomes.',
-    ][seed % 2];
-    result.push(fallbackOpener);
-  }
+  if (!newSentences.length) return sentences.join(' ');
 
-  const combined = [];
-  const maxLen = Math.max(result.length, targetCount);
+  // Interleave new sentences after the 1st and 2nd originals, never replacing them.
+  const out = [];
   let ri = 0;
   let ni = 0;
-  for (let i = 0; i < maxLen; i++) {
-    if (i === 0 && ri < result.length) {
-      combined.push(result[ri++]);
-      continue;
-    }
-    if (ni < newSentences.length && (i % 2 === 0 || ri >= result.length)) {
-      combined.push(newSentences[ni++]);
-    } else if (ri < result.length) {
-      combined.push(result[ri++]);
-    }
+  while (ri < sentences.length || ni < newSentences.length) {
+    if (ri < sentences.length) out.push(sentences[ri++]);
+    if (ni < newSentences.length && (ri === 2 || ri === 3)) out.push(newSentences[ni++]);
   }
-  while (ri < result.length) combined.push(result[ri++]);
-
-  return combined
-    .slice(0, Math.max(targetCount, result.length))
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  while (ni < newSentences.length) out.push(newSentences[ni++]);
+  return out.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 function reorderExperienceByRelevance(exp, jdRequired, seed) {
@@ -569,11 +648,7 @@ export function deterministicTailor(resumeText, jobDescription, seedOffset = 0) 
   const required = jdRequiredSkills(jobDescription);
   const parsed = parseResumeText(resumeText);
 
-  const originalSkills = (
-    parsed.skills.length ? parsed.skills : tokenize(resumeText).slice(0, 25)
-  ).map((s) => s.trim());
-
-  const skills = reorderSkillsWithJDFirst(originalSkills, required, seed);
+  const skills = reorderSkillsWithJDFirst(parsed.skills, required, seed);
 
   const exp = (parsed.experience || []).map((e, i) => ({
     title: e.title || '',
@@ -586,7 +661,7 @@ export function deterministicTailor(resumeText, jobDescription, seedOffset = 0) 
   const summary = buildRichSummary(parsed.summary, required, seed);
 
   const tailored = {
-    name: parsed.name || 'Your Name',
+    name: parsed.name || '',
     email: parsed.email || '',
     phone: parsed.phone || '',
     location: parsed.location || '',
@@ -596,13 +671,12 @@ export function deterministicTailor(resumeText, jobDescription, seedOffset = 0) 
     education: parsed.education || [],
   };
 
-  return { model: `deterministic-v1(seed=${seed})`, tailored };
+  return { model: `deterministic-v2(seed=${seed})`, tailored };
 }
 
 /* ---------- Tailoring entry point (3 attempts, always returns) ---------- */
 export async function tailorResume(resumeText, jobDescription, seedOffset = 0) {
   if (!OPENROUTER_API_KEY) {
-    // No key at all — still return something useful.
     console.warn('OPENROUTER_API_KEY missing — using deterministic fallback directly.');
     return deterministicTailor(resumeText, jobDescription, seedOffset);
   }
@@ -650,8 +724,6 @@ export async function tailorResume(resumeText, jobDescription, seedOffset = 0) {
     return { model: usedModel, tailored };
   } catch (e) {
     console.warn('Last-resort AI failed:', e.message, e.detail || '');
-
-    // ---------- Attempt 3: deterministic fallback (always succeeds) ----------
     return deterministicTailor(resumeText, jobDescription, seedOffset);
   }
 }
