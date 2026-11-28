@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     }
 
     try {
-      const { model, tailored } = await tailorResume(resumeText, jd);
+      const { model, tailored } = await tailorResume(resumeText, jd, i);
       results.push({
         url: job.url,
         status: 'completed',
